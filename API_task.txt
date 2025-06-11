@@ -1,0 +1,311 @@
+.
+├── main.py
+├── api
+│   └── routes.py
+├── core
+│   └── exceptions.py
+├── models
+│   └── schemas.py
+├── requirements.txt
+
+
+
+#models/schemas.py
+
+from pydantic import BaseModel, Field, UUID4, validator, root_validator
+from typing import Optional, List, Dict
+from enum import Enum
+
+
+# ENUMS FOR VALIDATION
+class TaskNameEnum(str, Enum):
+    extractive_summarization = "extractive_summarization"
+    abstractive_summarization = "abstractive_summarization"
+    classification = "classification"
+
+
+class RequestorTypeEnum(str, Enum):
+    member = "member"
+    provider = "provider"
+
+
+class ReadingLevelEnum(str, Enum):
+    eighth_grade = "8th_grade"
+
+
+class DocumentTypeEnum(str, Enum):
+    transcription = "transcription"
+    document = "document"
+
+
+# 5Ws RESPONSE CONTAINER
+class Extraction5WsContainer(BaseModel):
+    Who: str
+    What: str
+    When: str
+    Where: str
+    Why: str
+
+
+# SECTION: INSTRUCTIONS
+class Instructions(BaseModel):
+    TaskName: TaskNameEnum
+    RequestorType: RequestorTypeEnum
+    ReadingLevel: Optional[ReadingLevelEnum] = None
+
+
+# SECTION: DOCUMENT
+class Document(BaseModel):
+    DocumentType: DocumentTypeEnum
+    Metadata: Dict
+    Content: str
+    PriorAuth: Optional[List[str]] = Field(default_factory=list)
+    InteractionID: Optional[UUID4] = None
+    DCN: Optional[str] = None
+
+    @validator("DCN")
+    def validate_dcn(cls, v):
+        if v and not v.isalnum():
+            raise ValueError("DCN must be alphanumeric")
+        return v
+
+
+# SECTION: SOURCES
+class Sources(BaseModel):
+    Guidelines: Optional[List[str]] = Field(default_factory=list)
+    Glossary: Optional[List[str]] = Field(default_factory=list)
+
+
+# SECTION: INDICATORS
+class Indicators(BaseModel):
+    Citation: bool
+    Reasoning: bool
+
+    @root_validator
+    def check_citation_reasoning(cls, values):
+        if values.get("Citation") and not values.get("Reasoning"):
+            raise ValueError("Reasoning must be true if Citation is true.")
+        return values
+
+
+# MASTER REQUEST MODEL
+class TaskRequest(BaseModel):
+    Instructions: Instructions
+    Document: Document
+    Sources: Optional[Sources] = Sources()
+    Indicators: Indicators
+
+
+# RESPONSE MODEL
+class TaskResponse(BaseModel):
+    TaskName: str
+    ResponseContainer: Extraction5WsContainer
+
+
+
+
+
+##############api/routes.py
+
+from fastapi import APIRouter, HTTPException
+from models.schemas import TaskRequest, TaskResponse, Extraction5WsContainer
+
+router = APIRouter()
+
+
+@router.get("/capabilities")
+def get_capabilities():
+    """
+    Return the list of supported models.
+    """
+    return {"models": ["o3-mini-openai"]}
+
+
+@router.post("/heartbeat")
+async def heartbeat():
+    """
+    Simple POST to confirm service is alive.
+    """
+    return {"status": 200, "Info": "OK", "Role": "Mock Response"}
+
+
+@router.post("/task", response_model=TaskResponse)
+async def handle_task(payload: TaskRequest):
+    """
+    Main task handler that processes structured requests and returns extracted content.
+    """
+    try:
+        task_name = payload.Instructions.TaskName
+
+        # Example response payload - replace with logic
+        response = Extraction5WsContainer(
+            Who="Dr. John Smith",
+            What="Requested authorization for spinal MRI",
+            When="2025-06-11",
+            Where="City Hospital",
+            Why="Suspected herniated disc"
+        )
+
+        return TaskResponse(TaskName=task_name, ResponseContainer=response)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+
+########core/exceptions.py
+
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
+
+def register_exception_handlers(app: FastAPI):
+    @app.exception_handler(ValidationError)
+    async def validation_exception_handler(request: Request, exc: ValidationError):
+        return JSONResponse(
+            status_code=422,
+            content={"error": "Validation failed", "details": exc.errors()},
+        )
+
+    @app.exception_handler(Exception)
+    async def general_exception_handler(request: Request, exc: Exception):
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal Server Error", "message": str(exc)},
+        )
+
+
+
+#################   main.py
+
+from fastapi import FastAPI
+from core.exceptions import register_exception_handlers
+from api.routes import router as api_router
+
+app = FastAPI(title="Task Processor API", description="Processes medical task requests", version="1.1")
+
+app.include_router(api_router)
+register_exception_handlers(app)
+
+
+
+##############.
+├── tests
+│   └── test_api.py
+├── main.py
+├── models/
+├── api/
+├── core/
+├── requirements.txt
+
+
+
+
+
+######## requirements.txt
+fastapi
+uvicorn
+pydantic
+pytest
+httpx
+
+
+
+########    tests/test_api.py
+
+
+
+import pytest
+from httpx import AsyncClient
+from main import app
+
+
+@pytest.mark.asyncio
+async def test_get_capabilities():
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        response = await ac.get("/capabilities")
+    assert response.status_code == 200
+    assert "models" in response.json()
+    assert "o3-mini-openai" in response.json()["models"]
+
+
+@pytest.mark.asyncio
+async def test_post_heartbeat():
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        response = await ac.post("/heartbeat")
+    assert response.status_code == 200
+    assert response.json()["Info"] == "OK"
+
+
+@pytest.mark.asyncio
+async def test_valid_task_request():
+    payload = {
+        "Instructions": {
+            "TaskName": "extractive_summarization",
+            "RequestorType": "member",
+            "ReadingLevel": "8th_grade"
+        },
+        "Document": {
+            "DocumentType": "transcription",
+            "Metadata": {"source": "CallCenter"},
+            "Content": "Patient called requesting MRI for back pain...",
+            "PriorAuth": ["AUTH123"],
+            "InteractionID": "550e8400-e29b-41d4-a716-446655440000",
+            "DCN": "ABC123"
+        },
+        "Sources": {
+            "Guidelines": ["Guideline1"],
+            "Glossary": ["Term1"]
+        },
+        "Indicators": {
+            "Citation": True,
+            "Reasoning": True
+        }
+    }
+
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        response = await ac.post("/task", json=payload)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["TaskName"] == "extractive_summarization"
+    assert "ResponseContainer" in data
+    assert all(k in data["ResponseContainer"] for k in ["Who", "What", "When", "Where", "Why"])
+
+
+@pytest.mark.asyncio
+async def test_invalid_task_missing_reasoning():
+    payload = {
+        "Instructions": {
+            "TaskName": "classification",
+            "RequestorType": "provider"
+        },
+        "Document": {
+            "DocumentType": "document",
+            "Metadata": {},
+            "Content": "Test",
+            "PriorAuth": [],
+            "DCN": "123!@#"
+        },
+        "Indicators": {
+            "Citation": True,
+            "Reasoning": False
+        }
+    }
+
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        response = await ac.post("/task", json=payload)
+
+    assert response.status_code == 422 or response.status_code == 500
+    assert "error" in response.text.lower()
+
+
+
+
+
+
+
+#pytest tests/
+
+
+
