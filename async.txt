@@ -67,3 +67,273 @@ class ServiceUnavailableException(NextGenException):
 class GatewayTimeoutException(NextGenException):
     def __init__(self, message: str = "Gateway timed out while processing the request"):
         super().__init__(504, message)
+
+
+
+
+from typing import List, Optional, Dict
+from pydantic import BaseModel, Field, validator
+from enum import Enum
+
+# -------------------------
+# Enum Definitions
+# -------------------------
+
+class TaskName(str, Enum):
+    """Enumeration of supported task types."""
+    EXTRACT = "extract"
+    SUMMARIZE = "summarize"
+
+class RequestorType(str, Enum):
+    """Enumeration for types of requestors."""
+    PROVIDER = "provider"
+    PATIENT = "patient"
+
+class ReadingLevel(str, Enum):
+    """Enumeration of reading complexity levels."""
+    BASIC = "basic"
+    ADVANCED = "advanced"
+
+# -------------------------
+# 5Ws Extraction Container
+# -------------------------
+
+class Extraction5WsContainer(BaseModel):
+    """
+    Model representing the 5Ws (Who, What, When, Where, Why) extracted from a clinical or contextual document.
+    
+    Attributes:
+        who (List[str], optional): Entities involved in the context.
+        what (List[str], optional): Actions or elements described.
+        when (List[str], optional): Time-related references.
+        where (List[str], optional): Locations or places involved.
+        why (List[str], optional): Reasons, causes, or motivations.
+        supplemental (Dict[str, str], optional): Additional structured metadata.
+    """
+    who: Optional[List[str]] = Field(
+        default=None, description="List of entities involved (who)", min_items=1
+    )
+    what: Optional[List[str]] = Field(
+        default=None, description="List of actions or items (what)", min_items=1
+    )
+    when: Optional[List[str]] = Field(
+        default=None, description="List of time references (when)", min_items=1
+    )
+    where: Optional[List[str]] = Field(
+        default=None, description="List of locations (where)", min_items=1
+    )
+    why: Optional[List[str]] = Field(
+        default=None, description="List of reasons or causes (why)", min_items=1
+    )
+    supplemental: Optional[Dict[str, str]] = Field(
+        default=None, description="Additional extracted data"
+    )
+
+    @validator("who", "what", "when", "where", "why", each_item=True)
+    def non_empty_string(cls, v):
+        """Ensures each list element is a non-empty, non-whitespace-only string."""
+        if not v or not v.strip():
+            raise ValueError("List items must be non-empty strings")
+        return v
+
+# -------------------------
+# Request Payload Model
+# -------------------------
+
+class RequestPayload(BaseModel):
+    """
+    Main request model for tasks like extraction or summarization.
+    
+    Attributes:
+        task_name (TaskName): The task to perform (e.g., extract, summarize).
+        interaction_id (str, optional): ID to trace the interaction.
+        dcn (str, optional): Document Control Number; alphanumeric with optional hyphens.
+        claims (List[str], optional): List of claim IDs for processing.
+        prior_auth (List[str], optional): List of prior authorization references.
+        citation (bool): Flag to indicate if citation references are required in the response.
+        reasoning (bool): Flag to indicate if reasoning should be included in the response.
+        guidelines (List[str], optional): Guidelines to be considered while processing.
+        requestor_type (RequestorType, optional): Type of person or entity making the request.
+        reading_level (ReadingLevel, optional): Complexity level of the response content.
+    """
+    task_name: TaskName = Field(..., description="The name of the task to perform")
+
+    interaction_id: Optional[str] = Field(
+        default=None,
+        description="Optional interaction ID",
+        min_length=3,
+        max_length=100
+    )
+
+    dcn: Optional[str] = Field(
+        default=None,
+        description="Document Control Number",
+        regex=r"^[a-zA-Z0-9\-]+$"
+    )
+
+    claims: Optional[List[str]] = Field(
+        default=None,
+        description="List of claim identifiers",
+        min_items=1
+    )
+
+    prior_auth: Optional[List[str]] = Field(
+        default=None,
+        description="List of prior authorization references",
+        min_items=1
+    )
+
+    citation: bool = Field(
+        default=False, description="Flag to include citations in response"
+    )
+
+    reasoning: bool = Field(
+        default=False, description="Flag to include reasoning in response"
+    )
+
+    guidelines: Optional[List[str]] = Field(
+        default=None,
+        description="Clinical guidelines to consider",
+        min_items=1
+    )
+
+    requestor_type: Optional[RequestorType] = Field(
+        default=None, description="Type of requestor"
+    )
+
+    reading_level: Optional[ReadingLevel] = Field(
+        default=None, description="Desired reading level of the response"
+    )
+
+    @validator("claims", "prior_auth", "guidelines", each_item=True)
+    def check_non_empty_string_list(cls, v):
+        """Ensures that each item in the list is a non-empty string."""
+        if not v or not v.strip():
+            raise ValueError("Items in the list must be non-empty strings")
+        return v
+
+
+
+
+
+
+
+
+
+class NextGenException(Exception):
+    """
+    Base exception class for all custom NextGen exceptions.
+
+    Attributes:
+        code (int): HTTP-like status code representing the error or success.
+        message (str): Descriptive message of the exception.
+    """
+    def __init__(self, code: int, message: str):
+        self.code = code
+        self.message = message
+        super().__init__(f"{code} - {message}")
+
+
+# --- 2xx Success Codes ---
+
+class SuccessResponse(NextGenException):
+    """
+    Represents a successful operation (HTTP 200).
+    """
+    def __init__(self, message: str = "Request processed successfully"):
+        super().__init__(200, message)
+
+
+# --- 3xx Redirection Codes ---
+
+class RedirectionException(NextGenException):
+    """
+    Base class for redirection-related exceptions (HTTP 3xx).
+    """
+    def __init__(self, message: str = "Resource has been redirected"):
+        super().__init__(302, message)
+
+
+class ResourceMovedPermanently(RedirectionException):
+    """
+    Indicates that the requested resource has been moved permanently (HTTP 301).
+    """
+    def __init__(self, message: str = "Resource moved permanently"):
+        super().__init__(message)
+
+
+class NotModifiedException(RedirectionException):
+    """
+    Indicates that the resource has not been modified (HTTP 304).
+    """
+    def __init__(self, message: str = "Resource not modified"):
+        super().__init__(message)
+
+
+# --- 4xx Client Errors ---
+
+class InvalidRequestException(NextGenException):
+    """
+    Raised when request parameters are invalid or malformed (HTTP 400).
+    """
+    def __init__(self, message: str = "Invalid request parameters"):
+        super().__init__(400, message)
+
+
+class UnauthorizedException(NextGenException):
+    """
+    Raised when authentication is missing or invalid (HTTP 401).
+    """
+    def __init__(self, message: str = "Authentication required"):
+        super().__init__(401, message)
+
+
+class ForbiddenException(NextGenException):
+    """
+    Raised when the user does not have permission to access the resource (HTTP 403).
+    """
+    def __init__(self, message: str = "You don't have permission to access this resource"):
+        super().__init__(403, message)
+
+
+class NotFoundException(NextGenException):
+    """
+    Raised when the requested resource could not be found (HTTP 404).
+    """
+    def __init__(self, message: str = "Resource not found"):
+        super().__init__(404, message)
+
+
+class ConflictException(NextGenException):
+    """
+    Raised when there is a conflict with the current state of the resource (HTTP 409).
+    """
+    def __init__(self, message: str = "Conflict in the current state of the resource"):
+        super().__init__(409, message)
+
+
+# --- 5xx Server Errors ---
+
+class ProcessingException(NextGenException):
+    """
+    Raised when an error occurs during request processing (HTTP 500).
+    """
+    def __init__(self, message: str = "Error processing request"):
+        super().__init__(500, message)
+
+
+class ServiceUnavailableException(NextGenException):
+    """
+    Raised when the service is temporarily unavailable (HTTP 503).
+    """
+    def __init__(self, message: str = "Service is temporarily unavailable"):
+        super().__init__(503, message)
+
+
+class GatewayTimeoutException(NextGenException):
+    """
+    Raised when a timeout occurs while the gateway is processing the request (HTTP 504).
+    """
+    def __init__(self, message: str = "Gateway timed out while processing the request"):
+        super().__init__(504, message)
+
