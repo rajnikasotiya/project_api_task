@@ -1,0 +1,69 @@
+class NextGenException(Exception):
+    def __init__(self, code: int, message: str):
+        self.code = code
+        self.message = message
+        super().__init__(f"{code} - {message}")
+
+
+# --- 2xx Success Codes ---
+class SuccessResponse(NextGenException):
+    def __init__(self, message: str = "Request processed successfully"):
+        super().__init__(200, message)
+
+
+# --- 3xx Redirection Codes ---
+class RedirectionException(NextGenException):
+    def __init__(self, message: str = "Resource has been redirected"):
+        super().__init__(302, message)
+
+
+class ResourceMovedPermanently(RedirectionException):
+    def __init__(self, message: str = "Resource moved permanently"):
+        super().__init__(message)
+
+
+class NotModifiedException(RedirectionException):
+    def __init__(self, message: str = "Resource not modified"):
+        super().__init__(message)
+
+
+# --- 4xx Client Errors ---
+class InvalidRequestException(NextGenException):
+    def __init__(self, message: str = "Invalid request parameters"):
+        super().__init__(400, message)
+
+
+class UnauthorizedException(NextGenException):
+    def __init__(self, message: str = "Authentication required"):
+        super().__init__(401, message)
+
+
+class ForbiddenException(NextGenException):
+    def __init__(self, message: str = "You don't have permission to access this resource"):
+        super().__init__(403, message)
+
+
+class NotFoundException(NextGenException):
+    def __init__(self, message: str = "Resource not found"):
+        super().__init__(404, message)
+
+
+class ConflictException(NextGenException):
+    def __init__(self, message: str = "Conflict in the current state of the resource"):
+        super().__init__(409, message)
+
+
+# --- 5xx Server Errors ---
+class ProcessingException(NextGenException):
+    def __init__(self, message: str = "Error processing request"):
+        super().__init__(500, message)
+
+
+class ServiceUnavailableException(NextGenException):
+    def __init__(self, message: str = "Service is temporarily unavailable"):
+        super().__init__(503, message)
+
+
+class GatewayTimeoutException(NextGenException):
+    def __init__(self, message: str = "Gateway timed out while processing the request"):
+        super().__init__(504, message)
