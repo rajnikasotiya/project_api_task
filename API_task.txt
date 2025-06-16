@@ -309,3 +309,234 @@ async def test_invalid_task_missing_reasoning():
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##############################
+
+
+except NetworkException as ne:
+        logger.error(f"Network error: {ne.detail}")
+        raise ne
+    except LLMProviderException as le:
+        logger.error(f"LLM provider error: {le.detail}")
+        raise le
+    except TimeoutException as te:
+        logger.error(f"Timeout error: {te.detail}")
+        raise te
+
+
+
+logger.error(f"Unhandled error in /generate: {str(e)}")
+        raise NextGenException(detail=f"Unhandled error in /generate: {str(e)}")
+
+
+
+class ErrorCode:
+    SUCCESS = 200
+    BAD_REQUEST = 400
+    UNAUTHORIZED = 401
+    FORBIDDEN = 403
+    NOT_FOUND = 404
+    SERVER_ERROR = 500
+    CUSTOM_VALIDATION_ERROR = 422
+    NETWORK_ERROR = 503
+    LLM_PROVIDER_ERROR = 520  # Custom code for LLM provider errors
+    TIMEOUT_ERROR = 504
+
+
+
+
+
+
+from fastapi import HTTPException
+from app.config.error_codes import ErrorCode
+
+class NextGenException(HTTPException):
+    def __init__(self, status_code: int = ErrorCode.SERVER_ERROR, detail: str = "An error occurred", headers: dict = None):
+        super().__init__(status_code=status_code, detail=detail, headers=headers)
+
+class InvalidPayloadException(NextGenException):
+    def __init__(self, detail: str = "Invalid input payload"):
+        super().__init__(status_code=ErrorCode.BAD_REQUEST, detail=detail)
+
+class NotFoundException(NextGenException):
+    def __init__(self, detail: str = "Resource not found"):
+        super().__init__(status_code=ErrorCode.NOT_FOUND, detail=detail)
+
+class UnauthorizedException(NextGenException):
+    def __init__(self, detail: str = "Unauthorized access"):
+        super().__init__(status_code=ErrorCode.UNAUTHORIZED, detail=detail)
+
+class ForbiddenException(NextGenException):
+    def __init__(self, detail: str = "Access forbidden"):
+        super().__init__(status_code=ErrorCode.FORBIDDEN, detail=detail)
+
+class NetworkException(NextGenException):
+    def __init__(self, detail: str = "Network error"):
+        super().__init__(status_code=ErrorCode.NETWORK_ERROR, detail=detail)
+
+class LLMProviderException(NextGenException):
+    def __init__(self, detail: str = "LLM provider error"):
+        super().__init__(status_code=ErrorCode.LLM_PROVIDER_ERROR, detail=detail)
+
+class TimeoutException(NextGenException):
+    def __init__(self, detail: str = "Request timed out"):
+        super().__init__(status_code=ErrorCode.TIMEOUT_ERROR, detail=detail)
+
+
+
+
+
+
+
+
+
+from pydantic import BaseModel, field_validator, model_validator, ValidationError
+from typing import List, Optional
+from app.exceptions.custom_exceptions import InvalidPayloadException
+
+class Document(BaseModel):
+    document_type: str
+    metadata: dict
+    content: str
+    prior_auth: Optional[List[str]] = []
+    interaction_id: Optional[str] = None
+    dcn: Optional[str] = None
+
+    @field_validator('document_type', mode='before')
+    @classmethod
+    def validate_document_type(cls, v):
+        if not v or not isinstance(v, str):
+            raise InvalidPayloadException(detail="document_type must be a non-empty string")
+        return v
+
+    @field_validator('content', mode='before')
+    @classmethod
+    def validate_content(cls, v):
+        if not v or not isinstance(v, str):
+            raise InvalidPayloadException(detail="content must be a non-empty string")
+        return v
+
+    @model_validator(mode='before')
+    @classmethod
+    def check_metadata(cls, values):
+        metadata = values.get('metadata')
+        if not isinstance(metadata, dict):
+            raise InvalidPayloadException(detail="metadata must be a dictionary")
+        return values
+
+class TaskRequest(BaseModel):
+    task_name: str
+    requestor_type: Optional[str]
+    reading_level: Optional[str]
+    document: Document
+    guidelines: Optional[List[str]] = []
+    glossary: Optional[str] = None
+    citation: bool = False
+    reasoning: bool = False
+
+    @field_validator('task_name', mode='before')
+    @classmethod
+    def validate_task_name(cls, v):
+        if not v or not isinstance(v, str):
+            raise InvalidPayloadException(detail="task_name must be a non-empty string")
+        return v
+
+    @model_validator(mode='after')
+    @classmethod
+    def post_validation(cls, values):
+        if not values.citation and not values.reasoning:
+            raise InvalidPayloadException(detail="At least one of citation or reasoning must be True")
+        return values
+
+
+
+
+
+
+
+
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from app.exceptions.custom_exceptions import (
+    NextGenException, InvalidPayloadException, NotFoundException, NetworkException, LLMProviderException, TimeoutException
+)
+from app.config.error_codes import ErrorCode
+from app.models.request import TaskRequest
+from app.services.llm_service import process_task
+from app.config.logger import logger
+from pydantic import ValidationError
+
+router = APIRouter()
+
+@router.get("/", tags=["Index"])
+def index():
+    logger.info("NextGen API is live!")
+    return {"message": "NextGen API is live!"}
+
+@router.get("/capabilities", tags=["Core"])
+async def get_capabilities():
+    try:
+        models = ["03-mini-openai", "gpt-4", "llama-3"]
+        logger.info("Fetching capabilities")
+        return JSONResponse(status_code=ErrorCode.SUCCESS, content={"models": models})
+    except Exception as e:
+        logger.error(f"Error in /capabilities: {str(e)}")
+        raise NextGenException(detail=f"Error in /capabilities: {str(e)}")
+
+
+@router.post("/heartbeat", tags=["Core"])
+async def heartbeat():
+    try:
+        logger.info("Heartbeat check")
+        return JSONResponse(status_code=ErrorCode.SUCCESS, content={"info": "heartbeat OK", "role": "backend"})
+    except Exception as e:
+        logger.error(f"Error in /heartbeat: {str(e)}")
+        raise NextGenException(detail=f"Error in /heartbeat: {str(e)}")
+
+
+@router.post("/generate", tags=["LLM"])
+async def generate_5ws(request: TaskRequest):
+    try:
+        logger.info(f"Received task: {request.task_name}")
+        response = await process_task(request)
+        return JSONResponse(status_code=ErrorCode.SUCCESS, content=response)
+    except (ValidationError, RequestValidationError) as ve:
+        logger.warning(f"Validation error: {ve}")
+        raise InvalidPayloadException(detail=str(ve))
+    except InvalidPayloadException as ipe:
+        logger.warning(f"Invalid payload: {ipe.detail}")
+        raise ipe
+    except NetworkException as ne:
+        logger.error(f"Network error: {ne.detail}")
+        raise ne
+    except LLMProviderException as le:
+        logger.error(f"LLM provider error: {le.detail}")
+        raise le
+    except TimeoutException as te:
+        logger.error(f"Timeout error: {te.detail}")
+        raise te
+    except NextGenException as ne:
+        logger.error(f"NextGen error: {ne.detail}")
+        raise ne
+    except Exception as e:
+        logger.error(f"Unhandled error in /generate: {str(e)}")
+        raise NextGenException(detail=f"Unhandled error in /generate: {str(e)}")
+
