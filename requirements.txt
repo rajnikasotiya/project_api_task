@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-dotenv
+pydantic
+
+# For logging and rotating file handler (part of stdlib, but for clarity)
+# logging
+# For test
+pytest
+httpx

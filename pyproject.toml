@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "nextgenapp"
+version = "0.1.0"
+description = "NextGenApp FastAPI backend"
+authors = ["Your Name <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "*"
+uvicorn = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
