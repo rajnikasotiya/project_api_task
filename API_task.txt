@@ -540,3 +540,75 @@ async def generate_5ws(request: TaskRequest):
         logger.error(f"Unhandled error in /generate: {str(e)}")
         raise NextGenException(detail=f"Unhandled error in /generate: {str(e)}")
 
+
+
+
+
+
+===================================
+from typing import Optional, List
+from pydantic import BaseModel, Field, field_validator
+
+class Instructions(BaseModel):
+    """
+    Model for instructions in the request payload.
+
+    Attributes:
+        task_name (TaskName): The task to perform (e.g., extract, summarize).
+        requestor_type (Optional[RequestorType]): Type of person or entity making the request.
+        reading_level (Optional[ReadingLevel]): Complexity level of the response content.
+    """
+    task_name: TaskName = Field(..., description="The name of the task to perform")
+    requestor_type: Optional[RequestorType] = Field(default=None, description="Type of requestor")
+    reading_level: Optional[ReadingLevel] = Field(default=None, description="Desired reading level of the response")
+
+    @field_validator("task_name", mode="before")
+    @classmethod
+    def not_empty_task_name(cls, v):
+        if v is None or (isinstance(v, str) and not v.strip()):
+            raise ValueError("task_name must not be empty.")
+        return v
+
+class RequestPayload(BaseModel):
+    """
+    Model for the full request payload.
+
+    Attributes:
+        instructions (Instructions): Instructions for the task.
+        document (Document): The document to process.
+        sources (Sources): Guidelines and glossary.
+        indicators (Indicators): Citation and reasoning flags.
+    """
+    instructions: Instructions = Field(..., description="Instructions for the task")
+    document: Document = Field(..., description="Document to process")
+    sources: Sources = Field(..., description="Guidelines and glossary")
+    indicators: Indicators = Field(..., description="Citation and reasoning flags")
+
+    model_config = dict(
+        json_schema_extra={
+            "example": {
+                "instructions": {
+                    "task_name": "five_ws_extraction",
+                    "requestor_type": "provider",
+                    "reading_level": "high_school"
+                },
+                "document": {
+                    "document_type": "report",
+                    "metadata": {"source": "hospital"},
+                    "content": "Patient was diagnosed with hypertension.",
+                    "prior_auth": ["AUTH456"],
+                    "interaction_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                    "dcn": "DOC123456"
+                },
+                "sources": {
+                    "guidelines": ["Follow up in 2 weeks"],
+                    "glossary": ["hypertension"]
+                },
+                "indicators": {
+                    "citation": True,
+                    "reasoning": False
+                }
+            }
+        }
+    )
+
