@@ -612,3 +612,352 @@ class RequestPayload(BaseModel):
         }
     )
 
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+from typing import Optional, List, Dict, Annotated
+
+from enum import Enum
+
+from pydantic import BaseModel, Field, field_validator
+class TaskName(str, Enum):
+
+
+Enum for supported task names.
+
+extractive_summarization: Extracts key sentences from the document.
+
+abstractive_summarization: Generates a summary in new words.
+classification: Classifies the document.
+
+
+five_ws_extraction: Extracts who, what, when, where, why.
+
+
+
+EXTRACTIVE_SUMMARIZATION "extractive_summarization"
+
+
+ABSTRACTIVE_SUMMARIZATION "abstractive_summarization"
+
+
+CLASSIFICATION "classification"
+
+
+
+FIVE_WS_EXTRACTION "five_ws_extraction"
+
+class RequestorType(str, Enum):
+
+
+Enum for the type of requestor.
+
+member: End user or patient.
+
+provider: Healthcare provider.
+
+admin: Administrator.
+
+system: Automated system.
+
+
+MEMBER "member"
+
+PROVIDER "provider"
+
+ADMIN = "admin"
+
+SYSTEM = "system"
+
+class ReadingLevel (str, Enum):
+
+Enum for reading level of the response conte
+
+ELEMENTARY: Elementary school level.
+
+middle_school: Middle school level.
+
+HIGH_SCHOOL: High school level.
+
+college: College level.
+
+professional: Professional/technical level.
+ELEMENTARY = "elementary"
+MIDDLE SCHOOL = "middle_school"
+
+HIGH_SCHOOL = "high_school"
+
+COLLEGE = "college"
+
+PROFESSIONAL = "professional"
+
+class DocumentType(str, Enum):
+
+Enum for document types.
+
+transcription: Transcribed text.
+
+document: General document.
+
+report: Report document.
+
+note: Note or memo.
+
+TRANSCRIPTION "transcription"
+
+DOCUMENT "document"
+
+REPORT "report"
+
+NOTE "note"
+
+class ExtractionSwsContainer (BaseModel):
+
+Model representing the Sis (who, what, when, where, why) extracted.
+
+Attributes:
+
+who (List[str], optional): Entities involved in the context.
+
+what (List[str), optional): Actions or elements described.
+
+when (List[str], optional): Time-related references.
+
+where (List[str), optional): Locations or places involved.
+
+why (List[str), optional): Reasons, causes, or motivations.
+
+supplemental (Dict(str, str), optional): Additional structured metadata.
+
+sho: Optional [List[str]] - Field(default-lone, description="List of entities")
+
+what: Optional [List[str]] Field(default-None, description "List of actions")
+
+when: Optional [List[str]] = Field(default-lione, description="List of date and time") where: Optional [List[str]] Field(default-lione, description "List of locations")
+
+why: Optional [List[str]] Field(default-tione, description="List of reasons")
+
+supplemental: Optional [Dict[str, str]] Field(default-lione, description="Additional data")
+
+@field_validator("who", "what", "when", "where", "why", node-"before")
+
+@classmethod
+
+def non_empty_string(cls, v):
+
+"""Ensures each list element is a non-empty, non-whitespace-only string."""
+
+if v is not None:
+
+if not isinstance(v, list):
+
+raise TypeError("value must be a list")
+
+for item in v:
+
+return v
+
+if not item or not str(item).strip():
+
+raise ValueError("List items must be non-empty strings.")
+
+class Instructions (BaseModel):
+
+ates
+
+
+Model for a Instructions in the request payload.
+
+Attributes:
+
+task_name (TaskName): The task to perform (e.g., extract, summarize).
+
+requestor_type (RequestorType, optional): Type of person or entity making the request.
+
+reading_level (ReadingLevel, optional): Complexity level of the response content.
+
+task_name: TaskName Field(..., description="The name of task")
+
+equestor_type: Optional [RequestorType] = Field(default=None , description="Type of requestor")
+
+reading_level: Optional [ReadingLevel] = Field(default=None, description="Desired reading level of the response")
+
+class Document(BaseModel):
+
+Model for a document in the request payload.
+
+Attributes:
+
+document_type (str): Type of the document.
+
+metadata (dict): Metadata for the document.
+
+content (str): The main content of the document.
+
+prior_auth (List [str], optional): Prior authorizations.
+
+interaction_id (str, optional): Interaction ID.
+
+document_type: Document Type Field(..., description="Type of the document")
+
+metadata: dict = Field(..., description="Metadata for the document")
+
+content: str = Field(..., description="The main content of the document")
+
+prior_auth: Optional [List[str]] = Field(default_factory-list, description="Prior authorizations")
+
+interaction_id: Optional [str] = Field(default=None, description="Interaction ID")
+
+dcn: Optional [str] = Field(default=None, description="Document Control Number")
+
+@field_validator("document_type", "content", mode="before")
+
+@classmethod
+
+def not_empty(cls, v):
+
+if v is None or (isinstance(v, str) and not v.strip()):
+
+raise ValueError("Field must not be empty.")
+
+return v
+
+@field_validator("prior_auth", "interaction_id", mode="before")
+
+@classmethod
+
+def check_non_empty_string_list(cls, v):
+
+if v is not None:
+
+if not isinstance(v, list):
+
+raise TypeError("Value must be a list ")
+
+for item in v:
+
+return v
+
+if not item or not str(item).strip():
+
+raise ValueError("Items in the list must be non-empty strings")
+
+@field_validator("dcn")
+
+@classmethod
+
+def validate_dcn(cls, v):
+
+if v and not v.isalnum():
+
+raise ValueError("DCN must be alphanumeric")
+
+return v
+
+class Sources (BaseModel):
+
+Model for a document in the request payload.
+
+Attributes:
+
+guidelines (List[str], optional): Guidelines to be considered while processing.
+
+guidglossaryelines (List[str], optional): glossary to be considered while processing.
+
+guidelines: Optional [List[str]] = Field(default=None, description="List of guidelines")
+
+glossary: Optional [List[str]] = Field(default=None, description="List of glossary")
+
+@field_validator("guidelines", "glossary", mode="before")
+
+@classmethod
+
+def check_non_empty_string_list(cls, v):
+
+if v is not None:
+
+if not isinstance(v, list):
+
+raise TypeError("Value must be a list")
+
+for item in v:
+
+return v
+
+if not item or not str(item).strip():
+
+raise ValueError("Items in the list must be non-empty strings")
+
+class Indicators (BaseModel):
+
+Model for a indicator in the request payload.
+
+Attributes:
+
+citation (bool): Flag to indicate if citation references are required in the response.
+
+reasoning (bool): Flag to indicate if reasoning should be included in the response.
+
+citation: bool = Field(default=False, description="Flag to include citations in response .")
+
+reasoning: bool = Field(default-False, description="Flag to include reasoning in response.")
+
+citation: bool Field(default-False, description="Flag to include citations in response.")
+
+reasoning: bool Field(default=False, description="Flag to include reasoning in response.")
+
+
+@field_validator("citation", mode="after")
+@classmethod
+
+
+def check_citation_reasoning(cls, v, info):
+if v and not info.data.get("reasoning"):
+info.data["reasoning"] = True
+
+return v
+
+class RequestPayload (BaseModel):
+instructions: Instructions
+document: Document
+sources: Sources
+indicators: Indicators
+model_config = dict(
+json_schema_extra={
+
+"example": {
+"task_name": "five_ws_extraction",
+
+"interaction_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+"dcn": "DOC123456",
+
+"citation": True,
+"reasoning": False,
+
+"requestor_type": "provider",
+
+"reading_level": "high_school",
+
+"claims": ["CLAIM123"],
+
+"prior_auth": ["AUTH456"],
+
+"guidelines": ["Follow up in 2 weeks"],
+
+"document": {
+
+"document_type": "report",
+
+"metadata": {"source": "hospital"},
+
+"content": "Patient was diagnosed with hypertension.",
+
+"prior_auth": ["AUTH456"],
+
+"interaction_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+
+"dcn": "DOC123456"
