@@ -961,3 +961,39 @@ json_schema_extra={
 "interaction_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
 
 "dcn": "DOC123456"
+
+
+
+
+
+
+!!!!!!!!!!!!!!!!!!!!!!!
+
+from enum import StrEnum, auto
+from fastapi import FastAPI
+from pydantic import BaseModel, Field
+from typing import Annotated, Optional, List
+
+class AutoStrEnum(StrEnum):
+    def _generate_next_value_(name, start, count, last_values):
+        return name.lower()
+
+# Enums
+class TaskName(AutoStrEnum):
+    EXTRACTIVE_SUMMARIZATION = auto()
+    ABSTRACTIVE_SUMMARIZATION = auto()
+    CLASSIFICATION = auto()
+    FIVE_WS_EXTRACTION = auto()
+
+class RequestorType(AutoStrEnum):
+    MEMBER = auto()
+    PROVIDER = auto()
+    ADMIN = auto()
+    SYSTEM = auto()
+
+class ReadingLevel(AutoStrEnum):
+    ELEMENTARY = auto()
+    MIDDLE_SCHOOL = auto()
+    HIGH_SCHOOL = auto()
+    COLLEGE = auto()
+    PROFESSIONAL = auto()
