@@ -1,0 +1,91 @@
+Strategy 1: Config-Driven Mock Routing via Hydra
+Purpose: Route to either mock data or real service logic using a Hydra-controlled toggle.
+
+Approach:
+
+Define a config key like app_mode: "mock" in Hydra YAML.
+Inject this config into services using @hydra.main() or a loader function.
+Use the value to decide which dependency (MockService vs RealService) to inject.
+Scalability:
+
+Easy to extend for multiple services (user, billing, claims).
+Configurable per test or environment (dev, mock, prod).
+
+
+
+
+Strategy 2: Dependency Injection via FastAPI Depends
+Purpose: Dynamically switch between mock and real implementations of a service or repository.
+
+Approach:
+
+Use a common service interface (AbstractPatientService)
+Register either a MockPatientService or RealPatientService with FastAPI Depends, controlled by config.
+def get_patient_service(cfg: Config = Depends(get_config)):
+    if cfg.app_mode == "mock":
+        return MockPatientService()
+    return RealPatientService()
+Scalability:
+
+Can be reused across routers, background tasks, and test clients.
+Centralized switching logic.
+
+
+
+Strategy 3: Use Pytest Fixtures + Hydra Config for Mocks
+Purpose: Decouple mock data and execution logic in tests.
+
+Approach:
+
+Define mock data paths and behavior in mock_config.yaml
+Load these values in pytest fixtures to build mock responses
+Mock dependencies using monkeypatch or override FastAPI dependencies
+Hydra YAML Example:
+
+app_mode: "mock"
+mock_data:
+  patient_data_path: "tests/mocks/patients.json"
+Scalability:
+
+Test behavior controlled by config, not rewritten code.
+Easily parameterized for edge cases.
+
+
+Strategy 4: Abstract Mock Clients for External APIs
+Purpose: Avoid hardcoding test clients by using mockable HTTP clients.
+
+Approach:
+
+Use an abstraction layer (e.g., PatientClient) that can be implemented using real httpx.AsyncClient or a mock object.
+In tests, override the dependency via FastAPI app.dependency_overrides.
+Scalability:
+
+Keeps HTTP mocking separate from app logic.
+Swappable mock clients can simulate slow networks, errors, or large payloads.
+
+
+Strategy 5: Environment-Aware FastAPI Startup Hooks
+Purpose: Inject or preload mock data into in-memory DB or cache at startup in mock mode.
+
+Approach:
+
+Use @app.on_event("startup") to check config.app_mode
+If in mock, load mock data from config path into DB
+Scalability:
+
+Enables full API testing with mock data.
+Clean separation between data and bootstrapping logic.
+
+
+Strategy 6: Centralized Configuration Loader
+Purpose: Load configuration (real/mock mode, data paths, flags) via Hydra once and pass across layers.
+
+Approach:
+
+Define global config schema with @dataclass + Hydra
+Load once in main.py or test entry point
+Make accessible through DI or global context object
+Scalability:
+
+Promotes single source of truth for mock configuration.
+All services use same config object—less duplication.
